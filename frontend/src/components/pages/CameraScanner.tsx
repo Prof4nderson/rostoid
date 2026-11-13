@@ -142,18 +142,25 @@ export default function CameraScanner({ camera, known, modelsReady, cooldowns, o
   const label = status === 'recognized' ? 'Pessoa reconhecida' : status === 'unknown' ? 'Rosto não cadastrado' : status === 'scanning' ? 'Aguardando rosto' : status === 'loading' ? 'Iniciando câmera' : status === 'error' ? 'Atenção necessária' : 'Câmera desligada';
   return <article className="scanner-card" aria-label={`Feed ${camera.label}, ${camera.direction === 'ENTRY' ? 'Entrada' : 'Saída'}`}>
     <div className="scanner-heading"><div><span className="eyebrow">{camera.direction === 'ENTRY' ? 'ENTRADA' : 'SAÍDA'} · CÂMERA CONFIGURADA</span><h2>{camera.label}</h2></div><span className={`camera-indicator ${cameraOn ? 'on' : ''}`}><i />{cameraOn ? 'ATIVA' : 'PAUSADA'}</span></div>
-    <div className="video-stage"><video ref={videoRef} muted playsInline aria-label={`Pré-visualização local: ${camera.label}`} />
-      {!cameraOn && <div className="video-placeholder"><span className="scan-glyph"><Aperture size={36} strokeWidth={1.2} /></span><b>Câmera pausada</b><p>Inicie este feed explicitamente.</p></div>}
-      {cameraOn && <div className="viewfinder" aria-hidden="true"><i /><i /><i /><i /></div>}
-      <div className={`scan-state ${status}`}><i />{label}</div>
+    <div className="scanner-body">
+      <div className="scanner-feed-column">
+        <div className="video-stage"><video ref={videoRef} muted playsInline aria-label={`Pré-visualização local: ${camera.label}`} />
+          {!cameraOn && <div className="video-placeholder"><span className="scan-glyph"><Aperture size={36} strokeWidth={1.2} /></span><b>Câmera pausada</b><p>Inicie este feed explicitamente.</p></div>}
+          {cameraOn && <div className="viewfinder" aria-hidden="true"><i /><i /><i /><i /></div>}
+          <div className={`scan-state ${status}`}><i />{label}</div>
+        </div>
+        <div className="camera-controls"><button className={cameraOn ? 'secondary-button' : 'primary-button'} onClick={cameraOn ? stopCamera : startCamera} disabled={!modelsReady && !cameraOn}>{cameraOn ? <><CameraOff size={17} /> Parar este feed</> : <><Camera size={17} /> Iniciar este feed</>}</button><span className="camera-hint">Sentido atual: <b>{camera.direction === 'ENTRY' ? 'Entrada' : 'Saída'}</b> · processamento local</span></div>
+      </div>
+      <aside className="scanner-side-panel" aria-label="Confirmação e resultado do feed">
+        <div className="side-panel-label"><ScanFace size={15} /> LEITURA DO FEED</div>
+        {error && <div className="inline-alert error" role="alert"><CircleAlert size={17} />{error}</div>}
+        {match ? <div className="match-card"><div className="match-icon"><CircleCheck size={19} /></div><div><span className="eyebrow">PARTICIPANTE IDENTIFICADO</span><strong>{match.publicId}</strong><small>{camera.direction === 'ENTRY' ? 'Entrada' : 'Saída'} · {camera.label}</small></div></div> : <div className="empty-detection"><ScanFace size={19} /><span>{status === 'unknown' ? 'Rosto sem correspondência' : 'Nenhuma identificação ativa'}</span></div>}
+        {status === 'unknown' && <div className="enroll-card"><div className="enroll-title"><UserPlus size={17} /><b>Confirmação única</b></div><p>Confirme uma vez que a pessoa foi informada e consentiu. A confirmação vale para este rosto enquanto ele permanecer no enquadramento.</p>
+          <label className="consent-check"><input type="checkbox" checked={consent} onChange={(e) => { const checked = e.target.checked; const descriptor = currentDescriptor.current; if (checked && descriptor) { consentedDescriptor.current = new Float32Array(descriptor); setConsent(true); } else { consentedDescriptor.current = null; setConsent(false); } }} /><span>Confirmo o consentimento para coleta e processamento biométrico deste rosto.</span></label>
+          <button className="primary-button wide" onClick={enroll} disabled={!consent || enrolling || !currentDescriptor.current}>{enrolling ? 'Cadastrando…' : 'Cadastrar pessoa consentida'}<UserPlus size={16} /></button></div>}
+        {notice && <div className="inline-alert success"><CircleCheck size={17} />{notice}</div>}
+        <div className="privacy-mini"><ShieldCheck size={16} /><span>Sem gravação de fotos ou vídeo; somente biometria cifrada é armazenada após consentimento.</span></div>
+      </aside>
     </div>
-    <div className="camera-controls"><button className={cameraOn ? 'secondary-button' : 'primary-button'} onClick={cameraOn ? stopCamera : startCamera} disabled={!modelsReady && !cameraOn}>{cameraOn ? <><CameraOff size={17} /> Parar este feed</> : <><Camera size={17} /> Iniciar este feed</>}</button><span className="camera-hint">Sentido atual: <b>{camera.direction === 'ENTRY' ? 'Entrada' : 'Saída'}</b> · processamento local</span></div>
-    {error && <div className="inline-alert error" role="alert"><CircleAlert size={17} />{error}</div>}
-    {match ? <div className="match-card"><div className="match-icon"><CircleCheck size={19} /></div><div><span className="eyebrow">PARTICIPANTE IDENTIFICADO</span><strong>{match.publicId}</strong><small>{camera.direction === 'ENTRY' ? 'Entrada' : 'Saída'} · {camera.label}</small></div></div> : <div className="empty-detection"><ScanFace size={19} /><span>{status === 'unknown' ? 'Rosto sem correspondência' : 'Nenhuma identificação ativa'}</span></div>}
-    {status === 'unknown' && <div className="enroll-card"><div className="enroll-title"><UserPlus size={17} /><b>Novo participante</b></div><p>O rosto não será salvo sem consentimento explícito. Este descritor atual só será enviado após sua confirmação.</p>
-      <label className="consent-check"><input type="checkbox" checked={consent} onChange={(e) => { const checked = e.target.checked; const descriptor = currentDescriptor.current; if (checked && descriptor) { consentedDescriptor.current = new Float32Array(descriptor); setConsent(true); } else { consentedDescriptor.current = null; setConsent(false); } }} /><span>Confirmo que a pessoa foi informada e consentiu com a coleta e o processamento biométrico. A confirmação vale apenas para este rosto enquanto ele permanecer no enquadramento.</span></label>
-      <button className="primary-button wide" onClick={enroll} disabled={!consent || enrolling || !currentDescriptor.current}>{enrolling ? 'Cadastrando…' : 'Cadastrar pessoa consentida'}<UserPlus size={16} /></button></div>}
-    {notice && <div className="inline-alert success"><CircleCheck size={17} />{notice}</div>}
-    <div className="privacy-mini"><ShieldCheck size={16} /><span>Sem gravação de fotos ou vídeo; somente biometria cifrada é armazenada após consentimento.</span></div>
   </article>;
 }

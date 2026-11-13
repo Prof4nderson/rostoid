@@ -125,3 +125,21 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 @keyframes holo-sweep { 0% { transform: translateX(-110%); } 55%,100% { transform: translateX(110%); } }
 @media (max-width: 760px) { .mode-badge { display: none; } .topbar { background: rgba(7,10,25,.88); } .sidebar { background: rgba(8,11,27,.95); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* UX: feed e confirmação no mesmo campo visual */
+.scanner-body { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, .72fr); gap: 15px; align-items: start; }
+.scanner-feed-column { min-width: 0; }
+.scanner-side-panel { min-width: 0; display: flex; flex-direction: column; gap: 11px; padding: 13px; border: 1px solid rgba(121,149,255,.24); border-radius: 8px; background: rgba(7,11,29,.48); }
+.side-panel-label { display: flex; align-items: center; gap: 7px; color: var(--accent); font: 500 9px var(--mono); letter-spacing: 1.25px; padding-bottom: 10px; border-bottom: 1px solid rgba(98,246,255,.18); }
+.scanner-side-panel .inline-alert, .scanner-side-panel .match-card, .scanner-side-panel .empty-detection, .scanner-side-panel .enroll-card, .scanner-side-panel .privacy-mini { margin-top: 0; }
+.scanner-side-panel .enroll-card { padding: 13px; }
+.scanner-side-panel .enroll-card p { margin: 8px 0 11px; }
+.scanner-side-panel .consent-check { font-size: 10px; }
+.scanner-side-panel .privacy-mini { margin-top: auto; }
+@media (max-width: 900px) {
+  .scanner-body { grid-template-columns: minmax(0, 1.2fr) minmax(230px, .8fr); }
+}
+@media (max-width: 700px) {
+  .scanner-body { grid-template-columns: 1fr; }
+  .scanner-side-panel { padding: 12px; }
+}
