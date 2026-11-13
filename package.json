@@ -1,0 +1,9 @@
+{
+  "name": "rostoid",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --dir frontend dev --host 0.0.0.0 --port 3000 --strictPort",
+    "build": "pnpm --dir frontend build"
+  }
+}
