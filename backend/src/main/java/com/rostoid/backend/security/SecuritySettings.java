@@ -38,4 +38,5 @@ public class SecuritySettings {
     public String getTokenHash() { return tokenHash; }
     public String getJwtSecret() { return jwtSecret; }
     public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
+    public void setJwtSecret(String jwtSecret) { this.jwtSecret = jwtSecret; }
 }
