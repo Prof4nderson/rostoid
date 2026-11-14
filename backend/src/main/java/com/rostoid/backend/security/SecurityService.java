@@ -7,27 +7,34 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import javax.crypto.Mac;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import com.rostoid.backend.people.PersonRepository;
+import com.rostoid.backend.event.CameraConfigurationRepository;
 
 @Service
 public class SecurityService {
     private static final int SETTINGS_ID = 1;
     private final SecuritySettingsRepository settings;
     private final UserAccountRepository users;
+    private final PersonRepository people;
+    private final CameraConfigurationRepository cameras;
     private final SecureRandom random = new SecureRandom();
-    public SecurityService(SecuritySettingsRepository settings, UserAccountRepository users) { this.settings = settings; this.users = users; }
+    public SecurityService(SecuritySettingsRepository settings, UserAccountRepository users, PersonRepository people, CameraConfigurationRepository cameras) { this.settings = settings; this.users = users; this.people = people; this.cameras = cameras; }
     @Transactional public void ensureInitialized() {
         if (settings.existsById(SETTINGS_ID)) {
             SecuritySettings existing = settings.findById(SETTINGS_ID).orElseThrow();
             if (existing.getJwtSecret() == null || existing.getJwtSecret().isBlank()) { byte[] jwt = new byte[48]; random.nextBytes(jwt); existing.setJwtSecret(b64(jwt)); settings.saveAndFlush(existing); }
+            claimLegacyData();
             return;
         }
         byte[] encryption = new byte[32], auth = new byte[32], jwt = new byte[48];
         random.nextBytes(encryption); random.nextBytes(auth); random.nextBytes(jwt);
         settings.saveAndFlush(new SecuritySettings(SETTINGS_ID, b64(encryption), b64(auth), b64(jwt)));
     }
+    private void claimLegacyData() { if (users.count() > 0) { String owner = users.findAll().getFirst().getUsername(); people.claimLegacyRecords(owner); cameras.claimLegacyRecords(owner); } }
     @Transactional(readOnly = true) public SecurityState state() {
         SecuritySettings s = settings.findById(SETTINGS_ID).orElseThrow(() -> new IllegalStateException("Configuração indisponível"));
         return new SecurityState(users.count() > 0, s.getEncryptionSalt(), s.getAuthSalt());
@@ -38,6 +45,33 @@ public class SecurityService {
         if (users.existsByUsernameIgnoreCase(normalized)) throw new IllegalArgumentException("Usuário já cadastrado");
         UserAccount user = users.save(new UserAccount(normalized, hashPassword(password)));
         return new AuthResult(user.getUsername(), issue(user.getUsername()));
+    }
+    @Transactional(readOnly = true) public List<UserAccountView> listUsers() {
+        String current = AuthenticatedUser.username();
+        return users.findAll().stream().map(u -> new UserAccountView(u.getId(), u.getUsername(), u.getCreatedAt(), u.getUsername().equalsIgnoreCase(current))).toList();
+    }
+    @Transactional public UserAccountView createUser(String username, String password) {
+        String normalized = normalize(username);
+        if (users.existsByUsernameIgnoreCase(normalized)) throw new IllegalArgumentException("Usuário já cadastrado");
+        UserAccount user = users.saveAndFlush(new UserAccount(normalized, hashPassword(password)));
+        return new UserAccountView(user.getId(), user.getUsername(), user.getCreatedAt(), false);
+    }
+    @Transactional public UserAccountView updateUser(Long id, String username, String password) {
+        UserAccount user = users.findById(id).orElseThrow(() -> new IllegalArgumentException("Usuário não encontrado"));
+        if (username != null && !username.isBlank()) {
+            String normalized = normalize(username);
+            if (user.getUsername().equalsIgnoreCase(AuthenticatedUser.username()) && !normalized.equalsIgnoreCase(user.getUsername())) throw new IllegalArgumentException("Altere o usuário atual encerrando a sessão e entrando novamente");
+            if (!normalized.equalsIgnoreCase(user.getUsername()) && users.existsByUsernameIgnoreCase(normalized)) throw new IllegalArgumentException("Usuário já cadastrado");
+            user.setUsername(normalized);
+        }
+        if (password != null && !password.isBlank()) { if (password.length() < 12) throw new IllegalArgumentException("A senha deve ter pelo menos 12 caracteres"); user.setPasswordHash(hashPassword(password)); }
+        users.saveAndFlush(user);
+        return new UserAccountView(user.getId(), user.getUsername(), user.getCreatedAt(), user.getUsername().equalsIgnoreCase(AuthenticatedUser.username()));
+    }
+    @Transactional public void deleteUser(Long id) {
+        UserAccount user = users.findById(id).orElseThrow(() -> new IllegalArgumentException("Usuário não encontrado"));
+        if (user.getUsername().equalsIgnoreCase(AuthenticatedUser.username())) throw new IllegalArgumentException("Não é possível excluir o usuário da sessão atual");
+        users.delete(user);
     }
     @Transactional(readOnly = true) public AuthResult login(String username, String password) {
         UserAccount user = users.findByUsernameIgnoreCase(normalize(username)).orElseThrow(() -> new IllegalArgumentException("Usuário ou senha inválidos"));

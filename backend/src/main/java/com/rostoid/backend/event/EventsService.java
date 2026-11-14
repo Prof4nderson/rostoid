@@ -3,6 +3,7 @@ package com.rostoid.backend.event;
 import com.rostoid.backend.common.ApiViews;
 import com.rostoid.backend.people.Person;
 import com.rostoid.backend.people.PersonRepository;
+import com.rostoid.backend.security.AuthenticatedUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class EventsService {
 
     @Transactional
     public ApiViews.CreatedEventView recognize(Long personId, Long cameraId) {
-        Person person = people.findForUpdate(personId)
+        Person person = (AuthenticatedUser.username() == null ? people.findForUpdate(personId) : people.findForUpdateOwned(personId, AuthenticatedUser.username()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pessoa não encontrada"));
         CameraConfiguration camera = cameras.requireConfigured(cameraId);
         Instant now = Instant.now();
@@ -42,7 +43,7 @@ public class EventsService {
     @Transactional(readOnly = true)
     public List<ApiViews.EventView> list(int requestedLimit) {
         int limit = Math.max(1, Math.min(500, requestedLimit));
-        return events.findAllByOrderByRecognizedAtDesc().stream().limit(limit)
+        return (AuthenticatedUser.username() == null ? events.findAllByOrderByRecognizedAtDesc() : events.findAllByPerson_OwnerUsernameOrderByRecognizedAtDesc(AuthenticatedUser.username())).stream().limit(limit)
                 .map(ApiViews.EventView::from).toList();
     }
 }

@@ -9,5 +9,6 @@ public interface RecognitionEventRepository extends JpaRepository<RecognitionEve
     Optional<RecognitionEvent> findTopByPerson_IdAndCameraIdAndDirectionOrderByRecognizedAtDesc(
             Long personId, Long cameraId, CameraDirection direction);
     Optional<RecognitionEvent> findTopByPerson_IdOrderByRecognizedAtDesc(Long personId);
+    List<RecognitionEvent> findAllByPerson_OwnerUsernameOrderByRecognizedAtDesc(String ownerUsername);
     List<RecognitionEvent> findAllByOrderByRecognizedAtDesc();
 }

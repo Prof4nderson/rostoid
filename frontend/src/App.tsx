@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type CameraConfiguration, type EventRecord, type Person, type Profile, type RecognitionReceipt } from './api/client';
+import { api, type CameraConfiguration, type EventRecord, type Person, type Profile, type RecognitionReceipt, type UserAccount } from './api/client';
 import { decryptJson, encryptJson } from './crypto/vault';
 import SecurityGate, { type Session } from './components/SecurityGate';
 import Shell, { type PageId } from './components/Shell';
@@ -7,6 +7,7 @@ import CameraPage from './components/pages/CameraPage';
 import type { KnownDescriptor } from './components/pages/CameraScanner';
 import PeoplePage from './components/pages/PeoplePage';
 import HistoryPage from './components/pages/HistoryPage';
+import UserAdminPanel from './components/pages/UserAdminPanel';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -15,6 +16,7 @@ export default function App() {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [cameras, setCameras] = useState<CameraConfiguration[]>([]);
   const [known, setKnown] = useState<KnownDescriptor[]>([]);
+  const [users, setUsers] = useState<UserAccount[]>([]);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('rostoid-theme') as 'light' | 'dark') || 'dark');
   const [loadError, setLoadError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -22,7 +24,7 @@ export default function App() {
   const refresh = useCallback(async (active: Session) => {
     setRefreshing(true); setLoadError('');
     try {
-      const [list, history, cameraList] = await Promise.all([api.people(active.token), api.events(active.token), api.cameras(active.token)]);
+      const [list, history, cameraList, userList] = await Promise.all([api.people(active.token), api.events(active.token), api.cameras(active.token), api.users(active.token)]);
       const descriptors: KnownDescriptor[] = [];
       for (const person of list) {
         try {
@@ -30,12 +32,12 @@ export default function App() {
           if (Array.isArray(values) && values.length > 0 && values.every(Number.isFinite)) descriptors.push({ person, descriptor: new Float32Array(values) });
         } catch { /* Um cadastro não descriptografável não é usado para reconhecimento. */ }
       }
-      setPeople(list); setEvents(history); setCameras(cameraList); setKnown(descriptors);
+      setPeople(list); setEvents(history); setCameras(cameraList); setUsers(userList); setKnown(descriptors);
     } catch (e) { setLoadError(e instanceof Error ? e.message : 'Falha ao carregar dados protegidos.'); }
     finally { setRefreshing(false); }
   }, []);
 
-  useEffect(() => { if (session) void refresh(session); else { setPeople([]); setEvents([]); setCameras([]); setKnown([]); } }, [session, refresh]);
+  useEffect(() => { if (session) void refresh(session); else { setPeople([]); setEvents([]); setCameras([]); setUsers([]); setKnown([]); } }, [session, refresh]);
   const addPerson = async (descriptor: Float32Array, cameraId: number) => {
     if (!session) throw new Error('Sessão encerrada.');
     if (!cameras.some((camera) => camera.id === cameraId)) throw new Error('Configure uma câmera antes de cadastrar.');
@@ -61,6 +63,9 @@ export default function App() {
     setCameras(saved);
     return saved;
   };
+  const createUser = async (username: string, password: string) => { if (!session) throw new Error('Sessão encerrada.'); const created = await api.createUser(session.token, username, password); setUsers(previous => [...previous, created]); };
+  const updateUser = async (id: number, username: string, password?: string) => { if (!session) throw new Error('Sessão encerrada.'); const updated = await api.updateUser(session.token, id, username, password); setUsers(previous => previous.map(user => user.id === id ? updated : user)); };
+  const deleteUser = async (id: number) => { if (!session) throw new Error('Sessão encerrada.'); await api.deleteUser(session.token, id); setUsers(previous => previous.filter(user => user.id !== id)); };
   const saveProfile = async (id: number, profile: Profile) => {
     if (!session) throw new Error('Sessão encerrada.');
     const encrypted = await encryptJson(profile, session.key);
@@ -79,14 +84,16 @@ export default function App() {
     setEvents((previous) => previous.filter((event) => event.personId !== id));
   };
   function lock() { setSession(null); setPage('camera'); }
+  const onboarding = !refreshing && cameras.length === 0;
+  useEffect(() => { if (session && onboarding) setPage('settings'); }, [session, onboarding]);
   function toggleTheme() { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); localStorage.setItem('rostoid-theme', next); }
 
   if (!session) return <SecurityGate onUnlock={setSession} />;
-  return <div className={`theme-root theme-${theme}`}><Shell active={page} onNavigate={setPage} onLock={lock} username={session.username} theme={theme} onToggleTheme={toggleTheme}>
+  return <div className={`theme-root theme-${theme}`}><Shell active={page} onNavigate={onboarding ? (next) => { if (next === 'settings') setPage(next); } : setPage} onLock={lock} username={session.username} theme={theme} onToggleTheme={toggleTheme} onboarding={onboarding}>
     {loadError && <div className="inline-alert error app-load-error" role="alert">{loadError}<button onClick={() => void refresh(session)}>Tentar novamente</button></div>}
     {refreshing && <div className="sync-note">Sincronizando registros cifrados…</div>}
     {page === 'camera' && <CameraPage known={known} cameras={cameras} showConfiguration={cameras.length === 0} showScanners onSaveCameras={saveCameras} onEnroll={addPerson} onEvent={createEvent} />}
-    {page === 'settings' && <CameraPage known={known} cameras={cameras} showConfiguration showScanners={false} onSaveCameras={saveCameras} onEnroll={addPerson} onEvent={createEvent} />}
+    {page === 'settings' && <><UserAdminPanel users={users} onCreate={createUser} onUpdate={updateUser} onDelete={deleteUser} />{onboarding && <div className="inline-alert warning onboarding-alert">Antes de usar o console, autorize e salve pelo menos uma câmera para esta conta. Esta configuração é exclusiva de @{session.username}.</div>}<CameraPage known={known} cameras={cameras} showConfiguration showScanners={false} onSaveCameras={saveCameras} onEnroll={addPerson} onEvent={createEvent} /></>}
     {page === 'people' && <PeoplePage people={people} onSaveProfile={saveProfile} onDelete={deletePerson} readProfile={readProfile} />}
     {page === 'history' && <HistoryPage events={events} people={people} readProfile={readProfile} />}
   </Shell></div>;

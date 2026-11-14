@@ -50,3 +50,9 @@
 
 ## [x] Temas de interface
 - Disponibilizar modo claro holográfico e modo escuro cyberpunk com glassmorphism neon, botão de alternância e preferência persistida localmente.
+
+
+## [x] Usuários e configurações individuais
+- Disponibilizar CRUD de usuários em Configurações, com criação, edição de usuário/senha e remoção, sem permitir remover a sessão atual.
+- Isolar cadastros biométricos, históricos e configurações de câmeras pelo usuário autenticado; cada conta pode configurar até duas câmeras com sentidos próprios.
+- No primeiro acesso de cada usuário, solicitar autorização e salvamento da configuração de câmera antes de liberar as demais áreas do console.

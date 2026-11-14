@@ -1,5 +1,6 @@
 export interface SecurityState { configured: boolean; encryptionSalt: string; authSalt: string }
 export interface AuthResult { username: string; token: string }
+export interface UserAccount { id: number; username: string; createdAt: string; current: boolean }
 export interface CameraConfiguration { id: number; deviceId: string; label: string; direction: 'ENTRY' | 'EXIT'; updatedAt: string }
 export interface Person { id: number; publicId: string; faceCiphertext: string; faceIv: string; profileCiphertext?: string | null; profileIv?: string | null; consentAt: string; createdAt: string; lastRecognizedAt?: string | null; registeredBy?: string | null }
 export interface EventRecord { id: number; personId: number; publicId: string; recognizedAt: string; cameraId?: number | null; cameraLabel?: string | null; direction?: 'ENTRY' | 'EXIT' | null }
@@ -10,6 +11,10 @@ const API_ROOT='/api';
 async function request<T>(path:string,token?:string,init:RequestInit={}):Promise<T>{const headers=new Headers(init.headers);if(init.body!==undefined&&!headers.has('Content-Type'))headers.set('Content-Type','application/json');if(token)headers.set('Authorization',`Bearer ${token}`);const r=await fetch(`${API_ROOT}${path}`,{...init,headers});if(!r.ok){const b=await r.json().catch(()=>null);throw new Error(b?.error||`Falha na API (${r.status})`)}if(r.status===204)return undefined as T;const body=await r.text();return(body?JSON.parse(body):undefined) as T}
 export const api={
  securityState:()=>request<SecurityState>('/security/state'),
+ users:(token:string)=>request<UserAccount[]>('/users',token),
+ createUser:(token:string,username:string,password:string)=>request<UserAccount>('/users',token,{method:'POST',body:JSON.stringify({username,password})}),
+ updateUser:(token:string,id:number,username:string,password?:string)=>request<UserAccount>(`/users/${id}`,token,{method:'PUT',body:JSON.stringify({username,password})}),
+ deleteUser:(token:string,id:number)=>request<void>(`/users/${id}`,token,{method:'DELETE'}),
  register:(username:string,password:string,bootstrapKey?:string)=>request<AuthResult>('/security/register',undefined,{method:'POST',body:JSON.stringify({username,password,bootstrapKey:bootstrapKey||undefined})}),
  login:(username:string,password:string)=>request<AuthResult>('/security/login',undefined,{method:'POST',body:JSON.stringify({username,password})}),
  people:(token:string)=>request<Person[]>('/people',token),cameras:(token:string)=>request<CameraConfiguration[]>('/cameras',token),
