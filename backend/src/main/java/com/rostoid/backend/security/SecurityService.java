@@ -2,70 +2,68 @@ package com.rostoid.backend.security;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.Base64;
-import java.util.HexFormat;
+import javax.crypto.Mac;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 @Service
 public class SecurityService {
     private static final int SETTINGS_ID = 1;
-    private final SecuritySettingsRepository repository;
+    private final SecuritySettingsRepository settings;
+    private final UserAccountRepository users;
     private final SecureRandom random = new SecureRandom();
-
-    public SecurityService(SecuritySettingsRepository repository) {
-        this.repository = repository;
-    }
-
-    @Transactional
-    public void ensureInitialized() {
-        if (repository.existsById(SETTINGS_ID)) return;
-        byte[] encryption = new byte[32];
-        byte[] auth = new byte[32];
-        random.nextBytes(encryption);
-        random.nextBytes(auth);
-        repository.saveAndFlush(new SecuritySettings(SETTINGS_ID,
-                Base64.getEncoder().encodeToString(encryption), Base64.getEncoder().encodeToString(auth)));
-    }
-
-    @Transactional(readOnly = true)
-    public SecurityState state() {
-        SecuritySettings settings = repository.findById(SETTINGS_ID)
-                .orElseThrow(() -> new IllegalStateException("Configuração de segurança indisponível"));
-        return new SecurityState(settings.getTokenHash() != null,
-                settings.getEncryptionSalt(), settings.getAuthSalt());
-    }
-
-    @Transactional
-    public boolean setup(String token) {
-        SecuritySettings settings = repository.findForUpdate(SETTINGS_ID)
-                .orElseThrow(() -> new IllegalStateException("Configuração de segurança indisponível"));
-        if (settings.getTokenHash() != null) return false;
-        settings.setTokenHash(hash(token));
-        return true;
-    }
-
-    @Transactional(readOnly = true)
-    public boolean authenticate(String token) {
-        if (token == null) return false;
-        return repository.findById(SETTINGS_ID).map(settings -> {
-            if (settings.getTokenHash() == null) return false;
-            byte[] expected = HexFormat.of().parseHex(settings.getTokenHash());
-            byte[] supplied = HexFormat.of().parseHex(hash(token));
-            return MessageDigest.isEqual(expected, supplied);
-        }).orElse(false);
-    }
-
-    private static String hash(String token) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(token.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("SHA-256 indisponível", e);
+    public SecurityService(SecuritySettingsRepository settings, UserAccountRepository users) { this.settings = settings; this.users = users; }
+    @Transactional public void ensureInitialized() {
+        if (settings.existsById(SETTINGS_ID)) {
+            SecuritySettings existing = settings.findById(SETTINGS_ID).orElseThrow();
+            if (existing.getJwtSecret() == null || existing.getJwtSecret().isBlank()) { byte[] jwt = new byte[48]; random.nextBytes(jwt); existing.setJwtSecret(b64(jwt)); settings.saveAndFlush(existing); }
+            return;
         }
+        byte[] encryption = new byte[32], auth = new byte[32], jwt = new byte[48];
+        random.nextBytes(encryption); random.nextBytes(auth); random.nextBytes(jwt);
+        settings.saveAndFlush(new SecuritySettings(SETTINGS_ID, b64(encryption), b64(auth), b64(jwt)));
     }
-
+    @Transactional(readOnly = true) public SecurityState state() {
+        SecuritySettings s = settings.findById(SETTINGS_ID).orElseThrow(() -> new IllegalStateException("Configuração indisponível"));
+        return new SecurityState(users.count() > 0, s.getEncryptionSalt(), s.getAuthSalt());
+    }
+    @Transactional public AuthResult register(String username, String password) {
+        if (users.count() > 0) throw new IllegalArgumentException("O cadastro inicial já foi concluído");
+        String normalized = normalize(username);
+        if (users.existsByUsernameIgnoreCase(normalized)) throw new IllegalArgumentException("Usuário já cadastrado");
+        UserAccount user = users.save(new UserAccount(normalized, hashPassword(password)));
+        return new AuthResult(user.getUsername(), issue(user.getUsername()));
+    }
+    @Transactional(readOnly = true) public AuthResult login(String username, String password) {
+        UserAccount user = users.findByUsernameIgnoreCase(normalize(username)).orElseThrow(() -> new IllegalArgumentException("Usuário ou senha inválidos"));
+        if (!verifyPassword(password, user.getPasswordHash())) throw new IllegalArgumentException("Usuário ou senha inválidos");
+        return new AuthResult(user.getUsername(), issue(user.getUsername()));
+    }
+    @Transactional(readOnly = true) public String authenticate(String token) {
+        try {
+            String[] p = token == null ? new String[0] : token.split("\\.");
+            if (p.length != 3) return null;
+            if (!MessageDigest.isEqual(hmac(p[0] + "." + p[1]).getBytes(StandardCharsets.US_ASCII), p[2].getBytes(StandardCharsets.US_ASCII))) return null;
+            String payload = new String(Base64.getUrlDecoder().decode(p[1]), StandardCharsets.UTF_8);
+            String sub = payload.replaceAll(".*\\\"sub\\\":\\\"([^\\\"]+)\\\".*", "$1");
+            long exp = Long.parseLong(payload.replaceAll(".*\\\"exp\\\":(\\d+).*", "$1"));
+            return exp > Instant.now().getEpochSecond() && users.existsByUsernameIgnoreCase(sub) ? sub : null;
+        } catch (Exception ignored) { return null; }
+    }
+    private String issue(String username) { long now = Instant.now().getEpochSecond(); String h = enc("{\"alg\":\"HS256\",\"typ\":\"JWT\"}"); String p = enc("{\"sub\":\"" + username + "\",\"iat\":" + now + ",\"exp\":" + (now + 28800) + "}"); return h + "." + p + "." + hmac(h + "." + p); }
+    private String hmac(String value) { try { Mac mac = Mac.getInstance("HmacSHA256"); mac.init(new javax.crypto.spec.SecretKeySpec(secret().getBytes(StandardCharsets.UTF_8), "HmacSHA256")); return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(value.getBytes(StandardCharsets.UTF_8))); } catch (Exception e) { throw new IllegalStateException(e); } }
+    private String secret() { return settings.findById(SETTINGS_ID).orElseThrow().getJwtSecret(); }
+    private String hashPassword(String password) { try { byte[] salt = new byte[16]; random.nextBytes(salt); return "pbkdf2$" + b64(salt) + "$" + b64(pbkdf2(password, salt)); } catch (Exception e) { throw new IllegalStateException(e); } }
+    private boolean verifyPassword(String password, String stored) { try { String[] p = stored.split("\\$"); return p.length == 3 && MessageDigest.isEqual(pbkdf2(password, Base64.getDecoder().decode(p[1])), Base64.getDecoder().decode(p[2])); } catch (Exception e) { return false; } }
+    private byte[] pbkdf2(String password, byte[] salt) throws Exception { return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(new PBEKeySpec(password.toCharArray(), salt, 210000, 256)).getEncoded(); }
+    private static String normalize(String username) { String value = username == null ? "" : username.trim().toLowerCase(); if (!value.matches("[a-z0-9._-]{3,80}")) throw new IllegalArgumentException("Usuário deve ter 3 a 80 caracteres: letras, números, ponto, hífen ou sublinhado"); return value; }
+    private static String b64(byte[] value) { return Base64.getEncoder().encodeToString(value); }
+    private static String enc(String value) { return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8)); }
     public record SecurityState(boolean configured, String encryptionSalt, String authSalt) {}
+    public record AuthResult(String username, String token) {}
 }

@@ -1,1 +1,1 @@
-{"routes":[{"path":"/","title":"Rosto ID — Registro de Reconhecimento"}]}
+{"routes":[{"path":"/","title":"Login / RostoID"},{"path":"/#camera","title":"Câmera"},{"path":"/#people","title":"Pessoas"},{"path":"/#history","title":"Histórico"},{"path":"/#settings","title":"Configurações"}]}

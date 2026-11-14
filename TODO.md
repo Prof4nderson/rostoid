@@ -42,3 +42,11 @@
 ## [x] UX de monitoramento sem rolagem desnecessária
 - Após a configuração inicial, a tela **Câmera** mantém o foco nos feeds, imagens e controles individuais; a configuração deixa de ocupar o topo permanentemente.
 - Disponibilizar **Configurações** no menu lateral para alterar posteriormente dispositivos, rótulos e sentidos sem retirar a visualização dos feeds da tela principal.
+
+## [x] Login por usuário, senha e JWT
+- O acesso usa usuário e senha, com senha armazenada no backend como hash PBKDF2 salgado; o login emite JWT HS256 com expiração e o filtro valida o token em todas as APIs protegidas.
+- O usuário autenticado é associado ao cadastro biométrico no campo `registeredBy`, sem incluir dados pessoais em claro.
+- O console exibe o usuário da sessão e encerra a sessão ao bloquear.
+
+## [x] Temas de interface
+- Disponibilizar modo claro holográfico e modo escuro cyberpunk com glassmorphism neon, botão de alternância e preferência persistida localmente.

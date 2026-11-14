@@ -12,10 +12,10 @@ public final class ApiViews {
 
     public record PersonView(Long id, String publicId, String faceCiphertext, String faceIv,
                              String profileCiphertext, String profileIv, Instant consentAt,
-                             Instant createdAt, Instant lastRecognizedAt) {
+                             Instant createdAt, Instant lastRecognizedAt, String registeredBy) {
         public static PersonView from(Person p, Instant lastRecognizedAt) {
             return new PersonView(p.getId(), p.getPublicId(), p.getFaceCiphertext(), p.getFaceIv(),
-                    p.getProfileCiphertext(), p.getProfileIv(), p.getConsentAt(), p.getCreatedAt(), lastRecognizedAt);
+                    p.getProfileCiphertext(), p.getProfileIv(), p.getConsentAt(), p.getCreatedAt(), lastRecognizedAt, p.getRegisteredBy());
         }
     }
 

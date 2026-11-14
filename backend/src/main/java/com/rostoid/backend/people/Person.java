@@ -45,17 +45,22 @@ public class Person {
 
     @Column(nullable = false)
     private Instant createdAt;
+    @Column(name = "registered_by", length = 80)
+    private String registeredBy;
 
     @OneToMany(mappedBy = "person", cascade = CascadeType.REMOVE, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RecognitionEvent> events = new ArrayList<>();
 
     protected Person() {}
 
-    public Person(String faceCiphertext, String faceIv, Instant now) {
+    public Person(String faceCiphertext, String faceIv, Instant now) { this(faceCiphertext, faceIv, now, null); }
+
+    public Person(String faceCiphertext, String faceIv, Instant now, String registeredBy) {
         this.faceCiphertext = faceCiphertext;
         this.faceIv = faceIv;
         this.consentAt = now;
         this.createdAt = now;
+        this.registeredBy = registeredBy;
     }
 
     public void assignPublicId() {
@@ -75,4 +80,5 @@ public class Person {
     public String getProfileIv() { return profileIv; }
     public Instant getConsentAt() { return consentAt; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getRegisteredBy() { return registeredBy; }
 }

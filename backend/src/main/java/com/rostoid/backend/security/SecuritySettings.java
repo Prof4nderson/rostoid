@@ -20,17 +20,22 @@ public class SecuritySettings {
     @Column(length = 64)
     private String tokenHash;
 
+    @Column(length = 128)
+    private String jwtSecret;
+
     protected SecuritySettings() {}
 
-    public SecuritySettings(Integer id, String encryptionSalt, String authSalt) {
+    public SecuritySettings(Integer id, String encryptionSalt, String authSalt, String jwtSecret) {
         this.id = id;
         this.encryptionSalt = encryptionSalt;
         this.authSalt = authSalt;
+        this.jwtSecret = jwtSecret;
     }
 
     public Integer getId() { return id; }
     public String getEncryptionSalt() { return encryptionSalt; }
     public String getAuthSalt() { return authSalt; }
     public String getTokenHash() { return tokenHash; }
+    public String getJwtSecret() { return jwtSecret; }
     public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
 }

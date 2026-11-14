@@ -2,55 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { AlertTriangle, Aperture, ArrowRight, KeyRound, ShieldCheck } from 'lucide-react';
 import { api, type SecurityState } from '../api/client';
 import { deriveVault } from '../crypto/vault';
-
-export interface Session { token: string; key: CryptoKey }
-export default function SecurityGate({ onUnlock }: { onUnlock: (session: Session) => void }) {
-  const [security, setSecurity] = useState<SecurityState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [bootstrapKey, setBootstrapKey] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { api.securityState().then(setSecurity).catch((e: unknown) => setError(`Não foi possível conectar ao serviço: ${e instanceof Error ? e.message : 'erro de rede'}`)).finally(() => setLoading(false)); }, []);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setError('');
-    if (!security) return;
-    if (password.length < 12) { setError('Use uma senha com pelo menos 12 caracteres.'); return; }
-    if (!security.configured && bootstrapKey.length < 24) { setError('Informe a chave de provisionamento fornecida pelo responsável do projeto.'); return; }
-    if (!security.configured && password !== confirm) { setError('As senhas não coincidem.'); return; }
-    if (security.encryptionSalt === security.authSalt) { setError('O serviço retornou salts iguais. A configuração foi interrompida por segurança.'); return; }
-    setBusy(true);
-    try {
-      const derived = await deriveVault(password, security.encryptionSalt, security.authSalt);
-      if (security.configured) await api.login(derived.token); else await api.setup(derived.token, bootstrapKey);
-      setPassword(''); setConfirm(''); setBootstrapKey(''); onUnlock(derived);
-    } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível validar o cofre.'); }
-    finally { setBusy(false); }
-  }
-
-  return <main className="gate-page"><div className="gate-grid" aria-hidden="true" /><section className="gate-card">
-    <div className="gate-brand"><span className="brand-mark"><Aperture size={24} /></span><span>rosto<strong>ID</strong></span></div>
-    <div className="gate-eyebrow"><span className="live-dot" /> BIOMETRIA LOCAL · ACESSO RESTRITO</div>
-    <h1>{loading ? 'Iniciando cofre…' : security?.configured ? 'Desbloqueie seu cofre' : 'Configure seu cofre'}</h1>
-    <p className="gate-intro">Descritores biométricos e perfis permanecem cifrados no serviço. A chave de leitura é derivada localmente da sua senha.</p>
-    {!security && !loading && <div className="inline-alert error"><AlertTriangle size={18} />{error || 'Serviço indisponível. Verifique a conexão com a API.'}</div>}
-    {security && <form onSubmit={submit} className="gate-form">
-      <label htmlFor="vault-password">Senha do cofre</label>
-      <input id="vault-password" type="password" autoComplete={security.configured ? 'current-password' : 'new-password'} minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 12 caracteres" required disabled={busy} />
-      {!security.configured && <>
-        <label htmlFor="bootstrap-key">Chave de provisionamento</label>
-        <input id="bootstrap-key" type="password" autoComplete="off" minLength={24} value={bootstrapKey} onChange={(e) => setBootstrapKey(e.target.value)} placeholder="Fornecida pelo responsável do projeto" required disabled={busy} />
-        <div className="inline-alert warning"><AlertTriangle size={18} /><span>A configuração inicial só será aceita com a chave protegida do projeto. Não compartilhe esta chave em mensagens.</span></div>
-        <label htmlFor="vault-confirm">Confirme a senha</label>
-        <input id="vault-confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Digite novamente" required disabled={busy} />
-        <div className="inline-alert warning"><AlertTriangle size={18} /><span><b>Esta senha não pode ser recuperada.</b> Se esquecida, não será possível descriptografar descritores nem perfis salvos.</span></div>
-      </>}
-      {error && security && <div className="inline-alert error" role="alert">{error}</div>}
-      <button className="primary-button wide" type="submit" disabled={busy || loading}>{busy ? 'Validando…' : security.configured ? 'Desbloquear' : 'Criar cofre'}<ArrowRight size={17} /></button>
-    </form>}
-    <div className="gate-assurance"><KeyRound size={15} /> Chaves e senha ficam apenas na memória desta sessão.</div>
-    <div className="gate-foot"><ShieldCheck size={16} /> Protótipo · avalie privacidade e LGPD antes de uso real.</div>
-  </section><div className="gate-index">ROSTOID / AMBIENTE LOCAL <span>·</span> 01</div></main>;
+export interface Session { token: string; key: CryptoKey; username: string }
+export default function SecurityGate({ onUnlock }: { onUnlock:(session:Session)=>void }) {
+ const [security,setSecurity]=useState<SecurityState|null>(null),[loading,setLoading]=useState(true),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[bootstrapKey,setBootstrapKey]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{api.securityState().then(setSecurity).catch(e=>setError(`Não foi possível conectar ao serviço: ${e instanceof Error?e.message:'erro de rede'}`)).finally(()=>setLoading(false))},[]);
+ async function submit(event:FormEvent){event.preventDefault();setError('');if(!security)return;if(username.trim().length<3){setError('Informe um usuário com pelo menos 3 caracteres.');return}if(password.length<12){setError('Use uma senha com pelo menos 12 caracteres.');return}if(!security.configured&&password!==confirm){setError('As senhas não coincidem.');return}setBusy(true);try{const auth=security.configured?await api.login(username,password):await api.register(username,password,bootstrapKey);const derived=await deriveVault(password,security.encryptionSalt,security.authSalt);setPassword('');setConfirm('');setBootstrapKey('');onUnlock({...derived,token:auth.token,username:auth.username})}catch(e){setError(e instanceof Error?e.message:'Não foi possível autenticar.')}finally{setBusy(false)}}
+ const first=!security?.configured;
+ return <main className="gate-page"><div className="gate-grid" aria-hidden="true"/><section className="gate-card"><div className="gate-brand"><span className="brand-mark"><Aperture size={24}/></span><span>rosto<strong>ID</strong></span></div><div className="gate-eyebrow"><span className="live-dot"/> AUTENTICAÇÃO JWT · ACESSO RESTRITO</div><h1>{loading?'Conectando…':first?'Criar primeiro acesso':'Entrar no RostoID'}</h1><p className="gate-intro">Use seu usuário e senha para acessar o console. A sessão é assinada por JWT e os dados biométricos continuam cifrados no navegador.</p>{!security&&!loading&&<div className="inline-alert error"><AlertTriangle size={18}/>{error||'Serviço indisponível.'}</div>}{security&&<form onSubmit={submit} className="gate-form"><label htmlFor="username">Usuário</label><input id="username" type="text" autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} placeholder="ex.: operador.norte" required disabled={busy}/><label htmlFor="password">Senha</label><input id="password" type="password" autoComplete={first?'new-password':'current-password'} minLength={12} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo de 12 caracteres" required disabled={busy}/>{first&&<><label htmlFor="confirm">Confirme a senha</label><input id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="Digite novamente" required disabled={busy}/><label htmlFor="bootstrap-key">Chave de provisionamento <span className="optional-label">se configurada</span></label><input id="bootstrap-key" type="password" autoComplete="off" value={bootstrapKey} onChange={e=>setBootstrapKey(e.target.value)} placeholder="Fornecida pelo responsável" disabled={busy}/><div className="inline-alert warning"><AlertTriangle size={18}/><span>O primeiro usuário será criado pelo responsável do projeto. A senha não pode ser recuperada.</span></div></>}{error&&security&&<div className="inline-alert error" role="alert">{error}</div>}<button className="primary-button wide" type="submit" disabled={busy||loading}>{busy?'Autenticando…':first?'Criar conta':'Entrar'}<ArrowRight size={17}/></button></form>}<div className="gate-assurance"><KeyRound size={15}/> Senha, chave de cifragem e JWT não são gravados no navegador.</div><div className="gate-foot"><ShieldCheck size={16}/> Protótipo · avalie privacidade e LGPD antes de uso real.</div></section><div className="gate-index">ROSTOID / LOGIN SEGURO <span>·</span> 01</div></main>;
 }

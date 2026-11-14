@@ -5,6 +5,7 @@ import com.rostoid.backend.event.CameraConfiguration;
 import com.rostoid.backend.event.CameraConfigurationsService;
 import com.rostoid.backend.event.RecognitionEvent;
 import com.rostoid.backend.event.RecognitionEventRepository;
+import com.rostoid.backend.security.AuthenticatedUser;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,7 +31,7 @@ public class PeopleService {
     public ApiViews.PersonView create(PeopleRequests.CreatePersonRequest request) {
         CameraConfiguration camera = cameras.requireConfigured(request.cameraId());
         Instant now = Instant.now();
-        Person person = people.saveAndFlush(new Person(request.faceCiphertext(), request.faceIv(), now));
+        Person person = people.saveAndFlush(new Person(request.faceCiphertext(), request.faceIv(), now, AuthenticatedUser.username()));
         person.assignPublicId();
         events.save(new RecognitionEvent(person, now, camera.getId(), camera.getLabel(), camera.getDirection()));
         return ApiViews.PersonView.from(person, now);
